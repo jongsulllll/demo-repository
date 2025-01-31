@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+
+# cmd_val X
+# move_cmd.xyz -> control, 0.2 ~ 0.5 max
+
+
 import rospy
 from geometry_msgs.msg import Twist
 
@@ -17,12 +22,12 @@ def move_kobuki():
     move_cmd = Twist()
 
     # Move forward with a linear velocity of 0.2 m/s and no angular velocity
-    move_cmd.linear.x = 0.2
+    move_cmd.linear.x = 0.5
     move_cmd.angular.z = 0.0
 
     # Send movement commands for 5 seconds
     rospy.loginfo("Moving forward")
-    for _ in range(50):  # 10 Hz * 5 seconds = 50 iterations
+    for _ in range(12):  # 10 Hz * 5 seconds = 50 iterations
         pub.publish(move_cmd)
         rate.sleep()
 
