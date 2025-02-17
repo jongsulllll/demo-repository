@@ -9,6 +9,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from insightface.app import FaceAnalysis
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
+cv2.ocl.setUseOpenCL(True)
+
 # YOLO 모델 (사람=0, 총=1, 칼=2)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model = YOLO("/home/dev/runs/detect/train55/weights/epoch180.pt").to(device)
@@ -17,18 +19,23 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 face_model = YOLO("/home/dev/runs/detect/train34/weights/best.pt").to(device)
 
 # ArcFace
-arc_app = FaceAnalysis(name="buffalo_l")
-arc_app.prepare(ctx_id=0, det_size=(640,640))
-my_face_embedding = np.load("my_face_embedding.npy")
+arc_app = FaceAnalysis(name="buffalo_s")
+arc_app.prepare(ctx_id=0, det_size=(320,320))
+my_face_embedding = np.load("my_face.npy")
 
 def get_face_embedding(arc_app, face_img_bgr):
+    #s=time.time()
+    #print(face_img_bgr.shape)
     faces = arc_app.get(face_img_bgr)
     if len(faces) == 0:
         return None
+    #print("get face embedding time", time.time() - s)
     return faces[0].embedding
 
 def is_my_face(face_embedding, my_embedding, threshold=0.4):
+    #s=time.time()
     sim = cosine_similarity([face_embedding], [my_embedding])[0][0]
+    #print("is my face time",  time.time() - s)
     return (sim > threshold), sim
 
 # Pose 전용: Dangerous person만 크롭 영상에 대해 Pose
@@ -62,8 +69,8 @@ def boxes_overlap(boxA, boxB):
 ############################
 # 2) DeepSORT 초기화
 ############################
-tracker = DeepSort(max_age=0,
-                   n_init=0,
+tracker = DeepSort(max_age=5,
+                   n_init=1,
                    nms_max_overlap=1.0,
                    embedder='mobilenet',
                    half=True,
@@ -74,8 +81,8 @@ tracker = DeepSort(max_age=0,
 ############################
 cap = cv2.VideoCapture(0)
 # Set width, height, and FPS
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Set width to 1280 pixels
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  # Set height to 720 pixels
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Set width to 1280 pixels
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)  # Set height to 720 pixels
 cap.set(cv2.CAP_PROP_FPS, 30)  # Set FPS to 30
 # Get width, height, and FPS
 width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
@@ -159,25 +166,28 @@ while True:
     track_is_me = {}
 
     t3=time.time() ##########################################################################################
-    print('len of tracked bosx : ',len(tracked_boxes))
-
+    #print("current time is ", t3)
     for (tid, px1, py1, px2, py2) in tracked_boxes:
-#        print(f'for {(tid, px1, py1, px2, py2)}')
         px1 = max(0, px1)
-        
+        s=time.time()
         face_results = face_model(frame[py1:py2, px1:px2], verbose=False)
+        #print('yolo time is ', time.time() - s)   # 5~10ms
         for box in face_results[0].boxes:
-            #print('box class is', int(box.cls))
             if int(box.cls) == 2:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
-                person_crop = frame[py1+y1:py1+y2, px1+x1:px1+x2]
+                person_crop = frame[py1+y1-50:py1+y2+50, px1+x1-50:px1+x2+50]
+                cv2.rectangle(frame, (px1 + x1, py1 + y1), (px1 + x2, py1 + y2), (0, 0, 255), 2)
+                #person_crop = cv2.resize(person_crop, (320,320), interpolation=cv2.INTER_AREA)
                 break
+        #print("first for loop", time.time() - t3)
+        #t3=time.time() 
+        
+        
         #person_crop = frame[py1:300, px1:px2]
         #person_crop = cv2.resize(person_crop, (0, 0), fx=0.2, fy=0.2)
         if person_crop.size == 0:
             track_is_me[tid] = False
-            continue
-
+            continue	
         face_embedding = get_face_embedding(arc_app, person_crop)
         if face_embedding is not None:
             same_person, sim = is_my_face(face_embedding, my_face_embedding, threshold=0.3)
