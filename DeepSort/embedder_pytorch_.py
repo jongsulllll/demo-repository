@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import pkg_resources
 import torch
+
 from torchvision.transforms import transforms
 
 from deep_sort_realtime.embedder.mobilenetv2_bottle import MobileNetV2_bottle
